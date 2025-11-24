@@ -1,0 +1,382 @@
+const User = require('../models/User');
+const Order = require('../models/Order');
+const Review = require('../models/Review');
+const Product = require('../models/Product');
+const cloudinary = require('../config/cloudinary');
+
+exports.addProduct = async (req, res) => {
+  try {
+    const { name, description, price, category, stock } = req.body;
+
+    // Validation
+    if (!name || !description || !price || !category || stock === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields',
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload product image',
+      });
+    }
+
+    // Upload image to Cloudinary
+    let uploadedImage = null;
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: 'house-of-salaga/products' },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+
+      uploadedImage = {
+        url: result.secure_url,
+        publicId: result.public_id,
+      };
+    } catch (uploadError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image upload failed',
+        error: uploadError.message,
+      });
+    }
+
+    // Create product
+    const product = new Product({
+      name,
+      description,
+      price,
+      category,
+      stock,
+      images: [uploadedImage],
+      createdBy: req.user.userId,
+    });
+
+    await product.save();
+    await product.populate('category', 'name');
+
+    res.status(201).json({
+      success: true,
+      message: 'Product added successfully',
+      data: product,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error adding product',
+      error: error.message,
+    });
+  }
+};
+
+exports.updateProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { name, description, price, category, stock } = req.body;
+
+    let product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found',
+      });
+    }
+
+    // Update fields
+    if (name) product.name = name;
+    if (description) product.description = description;
+    if (price) product.price = price;
+    if (category) product.category = category;
+    if (stock !== undefined) product.stock = stock;
+
+    // Handle image upload if new image provided
+    if (req.file) {
+      try {
+        // Delete old image if exists
+        if (product.images.length > 0) {
+          await cloudinary.uploader.destroy(product.images[0].publicId);
+        }
+
+        // Upload new image
+        const result = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { folder: 'house-of-salaga/products' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          stream.end(req.file.buffer);
+        });
+
+        product.images = [
+          {
+            url: result.secure_url,
+            publicId: result.public_id,
+          },
+        ];
+      } catch (uploadError) {
+        return res.status(400).json({
+          success: false,
+          message: 'Image upload failed',
+          error: uploadError.message,
+        });
+      }
+    }
+
+    await product.save();
+    await product.populate('category', 'name');
+
+    res.status(200).json({
+      success: true,
+      message: 'Product updated successfully',
+      data: product,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error updating product',
+      error: error.message,
+    });
+  }
+};
+
+exports.deleteProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found',
+      });
+    }
+
+    // Delete images from Cloudinary
+    for (const image of product.images) {
+      await cloudinary.uploader.destroy(image.publicId);
+    }
+
+    await Product.findByIdAndDelete(productId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Product deleted successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting product',
+      error: error.message,
+    });
+  }
+};
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const users = await User.find()
+      .select('-password')
+      .limit(limit)
+      .skip(skip);
+
+    const total = await User.countDocuments();
+
+    res.status(200).json({
+      success: true,
+      message: 'Users fetched successfully',
+      data: {
+        users,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          currentPage: page,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching users',
+      error: error.message,
+    });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    await User.findByIdAndDelete(userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'User deleted successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user',
+      error: error.message,
+    });
+  }
+};
+
+exports.getAllOrders = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status } = req.query;
+    const skip = (page - 1) * limit;
+
+    const query = status ? { status } : {};
+
+    const orders = await Order.find(query)
+      .populate('userId', 'name email phone')
+      .populate('items.productId', 'name price')
+      .limit(limit)
+      .skip(skip)
+      .sort({ createdAt: -1 });
+
+    const total = await Order.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      message: 'Orders fetched successfully',
+      data: {
+        orders,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          currentPage: page,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching orders',
+      error: error.message,
+    });
+  }
+};
+
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide status',
+      });
+    }
+
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      { status },
+      { new: true }
+    );
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order status updated',
+      data: order,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error updating order',
+      error: error.message,
+    });
+  }
+};
+
+exports.deleteReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found',
+      });
+    }
+
+    await Review.findByIdAndDelete(reviewId);
+
+    // Update product average rating
+    const reviews = await Review.find({ productId: review.productId });
+    if (reviews.length > 0) {
+      const avgRating =
+        reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+      await Product.findByIdAndUpdate(review.productId, {
+        averageRating: avgRating,
+        totalReviews: reviews.length,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Review deleted successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting review',
+      error: error.message,
+    });
+  }
+};
+
+exports.getSalesReport = async (req, res) => {
+  try {
+    const orders = await Order.find({ status: 'delivered' });
+
+    const totalSales = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+    const totalOrders = orders.length;
+    const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+    res.status(200).json({
+      success: true,
+      message: 'Sales report',
+      data: {
+        totalSales,
+        totalOrders,
+        averageOrderValue,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error generating report',
+      error: error.message,
+    });
+  }
+};
