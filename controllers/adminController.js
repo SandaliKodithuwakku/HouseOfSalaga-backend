@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const Review = require('../models/Review');
 const Product = require('../models/Product');
+const Category = require('../models/Category');
 const cloudinary = require('../config/cloudinary');
 
 exports.addProduct = async (req, res) => {
@@ -21,6 +22,13 @@ exports.addProduct = async (req, res) => {
         success: false,
         message: 'Please upload product image',
       });
+    }
+
+    // Find or create category
+    let categoryDoc = await Category.findOne({ name: category });
+    if (!categoryDoc) {
+      categoryDoc = new Category({ name: category });
+      await categoryDoc.save();
     }
 
     // Upload image to Cloudinary
@@ -49,12 +57,12 @@ exports.addProduct = async (req, res) => {
       });
     }
 
-    // Create product
+    // Create product with category ObjectId
     const product = new Product({
       name,
       description,
       price,
-      category,
+      category: categoryDoc._id,  // Use the ObjectId
       stock,
       images: [uploadedImage],
       createdBy: req.user.userId,
