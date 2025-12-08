@@ -188,6 +188,41 @@ exports.updateReview = async (req, res) => {
   }
 };
 
+exports.getUserReviews = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const reviews = await Review.find({ userId: req.user.userId })
+      .populate('productId', 'name images price')
+      .populate('orderId', '_id')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .skip(skip);
+
+    const total = await Review.countDocuments({ userId: req.user.userId });
+
+    res.status(200).json({
+      success: true,
+      message: 'User reviews fetched successfully',
+      data: {
+        reviews,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          currentPage: page,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user reviews',
+      error: error.message,
+    });
+  }
+};
+
 exports.deleteReview = async (req, res) => {
   try {
     const { reviewId } = req.params;
