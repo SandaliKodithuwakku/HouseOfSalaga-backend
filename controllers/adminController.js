@@ -5,6 +5,91 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const cloudinary = require('../config/cloudinary');
 
+exports.getDashboardStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+    // Current month stats
+    const [
+      currentMonthOrders,
+      lastMonthOrders,
+      currentMonthUsers,
+      lastMonthUsers,
+      totalProducts,
+      totalReviews,
+    ] = await Promise.all([
+      Order.find({ createdAt: { $gte: startOfCurrentMonth } }),
+      Order.find({ 
+        createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } 
+      }),
+      User.countDocuments({ createdAt: { $gte: startOfCurrentMonth } }),
+      User.countDocuments({ 
+        createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } 
+      }),
+      Product.countDocuments(),
+      Review.countDocuments(),
+    ]);
+
+    // Calculate totals
+    const totalOrders = await Order.countDocuments();
+    const totalUsers = await User.countDocuments();
+    
+    const allOrders = await Order.find();
+    const totalRevenue = allOrders.reduce((sum, order) => {
+      return sum + (order.totalAmount || 0) + (order.shippingFee || 0);
+    }, 0);
+
+    // Calculate current month revenue
+    const currentMonthRevenue = currentMonthOrders.reduce((sum, order) => {
+      return sum + (order.totalAmount || 0) + (order.shippingFee || 0);
+    }, 0);
+
+    // Calculate last month revenue
+    const lastMonthRevenue = lastMonthOrders.reduce((sum, order) => {
+      return sum + (order.totalAmount || 0) + (order.shippingFee || 0);
+    }, 0);
+
+    // Calculate growth percentages
+    const calculateGrowth = (current, previous) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return (((current - previous) / previous) * 100).toFixed(1);
+    };
+
+    const revenueGrowth = calculateGrowth(currentMonthRevenue, lastMonthRevenue);
+    const ordersGrowth = calculateGrowth(currentMonthOrders.length, lastMonthOrders.length);
+    const usersGrowth = calculateGrowth(currentMonthUsers, lastMonthUsers);
+
+    res.status(200).json({
+      success: true,
+      message: 'Dashboard stats fetched successfully',
+      data: {
+        totalRevenue: totalRevenue.toFixed(2),
+        revenueGrowth: revenueGrowth,
+        totalOrders,
+        ordersGrowth: ordersGrowth,
+        totalProducts,
+        productsGrowth: 0,
+        totalUsers,
+        usersGrowth: usersGrowth,
+        totalReviews,
+        reviewsGrowth: 0,
+        currentMonthRevenue: currentMonthRevenue.toFixed(2),
+        currentMonthOrders: currentMonthOrders.length,
+        averageOrderValue: totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching dashboard stats',
+      error: error.message,
+    });
+  }
+};
+
 exports.addProduct = async (req, res) => {
   try {
     const { name, description, price, category, stock } = req.body;
@@ -62,7 +147,7 @@ exports.addProduct = async (req, res) => {
       name,
       description,
       price,
-      category: categoryDoc._id,  // Use the ObjectId
+      category: categoryDoc._id,
       stock,
       images: [uploadedImage],
       createdBy: req.user.userId,

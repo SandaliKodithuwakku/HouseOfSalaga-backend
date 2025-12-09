@@ -3,6 +3,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const adminMiddleware = require('../middleware/adminMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 const {
+  getDashboardStats,
   addProduct,
   updateProduct,
   deleteProduct,
@@ -15,6 +16,9 @@ const {
 } = require('../controllers/adminController');
 
 const router = express.Router();
+
+// Dashboard Stats
+router.get('/stats', authMiddleware, adminMiddleware, getDashboardStats);
 
 // Product Management
 router.post('/products', authMiddleware, adminMiddleware, upload.single('image'), addProduct);
