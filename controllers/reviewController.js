@@ -272,3 +272,109 @@ exports.deleteReview = async (req, res) => {
     });
   }
 };
+
+// ============================================
+// ADMIN FUNCTIONS
+// ============================================
+
+// Get all reviews (Admin only)
+exports.getAllReviews = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status, search, rating, sortBy = 'createdAt' } = req.query;
+
+    // Build query
+    const query = {};
+    
+    // Filter by status if provided
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    // Filter by rating if provided
+    if (rating && rating !== 'all') {
+      query.rating = parseInt(rating);
+    }
+
+    // Search functionality
+    if (search) {
+      query.$or = [
+        { comment: { $regex: search, $options: 'i' } },
+        { title: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    // Get reviews with pagination
+    const reviews = await Review.find(query)
+      .populate('userId', 'name email')
+      .populate('productId', 'name images price')
+      .sort({ [sortBy]: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .lean();
+
+    // Get total count for pagination
+    const count = await Review.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        reviews,
+        pagination: {
+          total: count,
+          totalPages: Math.ceil(count / limit),
+          currentPage: parseInt(page),
+          limit: parseInt(limit),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching all reviews:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching reviews',
+      error: error.message,
+    });
+  }
+};
+
+// Update review status (Admin only)
+exports.updateReviewStatus = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const { status } = req.body;
+
+    // Validate status
+    const validStatuses = ['pending', 'approved', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be: pending, approved, or rejected',
+      });
+    }
+
+    const review = await Review.findById(reviewId);
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found',
+      });
+    }
+
+    review.status = status;
+    await review.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Review ${status} successfully`,
+      data: { review },
+    });
+  } catch (error) {
+    console.error('Error updating review status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating review status',
+      error: error.message,
+    });
+  }
+};
