@@ -47,16 +47,15 @@ exports.createOrder = async (req, res) => {
 
     const shippingFee = 50;
     const order = new Order({
-      userId: req.user.userId,
-      items: processedItems,
-      totalAmount,
-      shippingFee,
-      deliveryAddress,
-      phoneNumber,
-      paymentMethod: 'cash_on_delivery',
-    });
-
-    await order.save();
+    userId: req.user.userId,
+    items: processedItems,
+    totalAmount,
+    shippingFee,
+    deliveryAddress,
+    phoneNumber,
+    paymentMethod: paymentMethod || 'cash_on_delivery',
+  });
+      await order.save();
     await order.populate('userId', 'email name');
 
     // Clear cart
