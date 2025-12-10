@@ -188,7 +188,7 @@ exports.addProduct = async (req, res) => {
       colors: colorsArray,
       variants: variantsArray,
       images: [uploadedImage],
-      isNew: true, // Mark new products as "new"
+      isNew: true,
       createdBy: req.user.userId,
     });
 
@@ -226,8 +226,17 @@ exports.updateProduct = async (req, res) => {
     if (name) product.name = name;
     if (description) product.description = description;
     if (price) product.price = price;
-    if (category) product.category = category;
     if (stock !== undefined) product.stock = stock;
+
+    // Handle category - find or create like in addProduct
+    if (category) {
+      let categoryDoc = await Category.findOne({ name: category });
+      if (!categoryDoc) {
+        categoryDoc = new Category({ name: category });
+        await categoryDoc.save();
+      }
+      product.category = categoryDoc._id;
+    }
 
     // Update sizes if provided
     if (sizes) {
