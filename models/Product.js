@@ -1,4 +1,3 @@
-// ===== models/Product.js =====
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema(
@@ -33,6 +32,39 @@ const productSchema = new mongoose.Schema(
       required: [true, 'Product stock is required'],
       min: 0,
       default: 0,
+    },
+    sizes: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    colors: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    variants: [
+      {
+        size: {
+          type: String,
+          trim: true,
+        },
+        color: {
+          type: String,
+          trim: true,
+        },
+        stock: {
+          type: Number,
+          min: 0,
+          default: 0,
+        },
+      },
+    ],
+    isNew: {
+      type: Boolean,
+      default: false,
     },
     averageRating: {
       type: Number,

@@ -92,13 +92,13 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.addProduct = async (req, res) => {
   try {
-    const { name, description, price, category, stock } = req.body;
+    const { name, description, price, category, stock, sizes, colors, variants } = req.body;
 
     // Validation
-    if (!name || !description || !price || !category || stock === undefined) {
+    if (!name || !description || !price || !category) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields',
+        message: 'Please provide all required fields (name, description, price, category)',
       });
     }
 
@@ -142,14 +142,53 @@ exports.addProduct = async (req, res) => {
       });
     }
 
-    // Create product with category ObjectId
+    // Parse sizes, colors, and variants from JSON strings
+    let sizesArray = [];
+    let colorsArray = [];
+    let variantsArray = [];
+
+    if (sizes) {
+      try {
+        sizesArray = JSON.parse(sizes);
+      } catch (e) {
+        sizesArray = [];
+      }
+    }
+
+    if (colors) {
+      try {
+        colorsArray = JSON.parse(colors);
+      } catch (e) {
+        colorsArray = [];
+      }
+    }
+
+    if (variants) {
+      try {
+        variantsArray = JSON.parse(variants);
+      } catch (e) {
+        variantsArray = [];
+      }
+    }
+
+    // Calculate total stock from variants if provided, otherwise use base stock
+    let totalStock = parseInt(stock) || 0;
+    if (variantsArray.length > 0) {
+      totalStock = variantsArray.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0);
+    }
+
+    // Create product
     const product = new Product({
       name,
       description,
       price,
       category: categoryDoc._id,
-      stock,
+      stock: totalStock,
+      sizes: sizesArray,
+      colors: colorsArray,
+      variants: variantsArray,
       images: [uploadedImage],
+      isNew: true, // Mark new products as "new"
       createdBy: req.user.userId,
     });
 
@@ -173,7 +212,7 @@ exports.addProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     const { productId } = req.params;
-    const { name, description, price, category, stock } = req.body;
+    const { name, description, price, category, stock, sizes, colors, variants } = req.body;
 
     let product = await Product.findById(productId);
     if (!product) {
@@ -189,6 +228,36 @@ exports.updateProduct = async (req, res) => {
     if (price) product.price = price;
     if (category) product.category = category;
     if (stock !== undefined) product.stock = stock;
+
+    // Update sizes if provided
+    if (sizes) {
+      try {
+        product.sizes = JSON.parse(sizes);
+      } catch (e) {
+        // If parsing fails, keep existing
+      }
+    }
+
+    // Update colors if provided
+    if (colors) {
+      try {
+        product.colors = JSON.parse(colors);
+      } catch (e) {
+        // If parsing fails, keep existing
+      }
+    }
+
+    // Update variants if provided
+    if (variants) {
+      try {
+        const variantsArray = JSON.parse(variants);
+        product.variants = variantsArray;
+        // Recalculate total stock from variants
+        product.stock = variantsArray.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0);
+      } catch (e) {
+        // If parsing fails, keep existing
+      }
+    }
 
     // Handle image upload if new image provided
     if (req.file) {
