@@ -34,7 +34,7 @@ exports.getCart = async (req, res) => {
 
 exports.addToCart = async (req, res) => {
   try {
-    const { productId, quantity = 1 } = req.body;
+    const { productId, quantity = 1, size = '', color = '' } = req.body;
 
     if (!productId || quantity < 1) {
       return res.status(400).json({
@@ -63,7 +63,13 @@ exports.addToCart = async (req, res) => {
       cart = new Cart({ userId: req.user.userId, items: [] });
     }
 
-    const existingItem = cart.items.find((item) => item.productId.equals(productId));
+    // Check if same product with same size and color exists
+    const existingItem = cart.items.find(
+      (item) => 
+        item.productId.equals(productId) && 
+        item.size === size && 
+        item.color === color
+    );
 
     if (existingItem) {
       existingItem.quantity += quantity;
@@ -72,6 +78,8 @@ exports.addToCart = async (req, res) => {
         productId,
         quantity,
         price: product.price,
+        size,
+        color,
       });
     }
 

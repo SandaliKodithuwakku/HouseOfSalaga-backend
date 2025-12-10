@@ -1,4 +1,3 @@
-// ===== models/Cart.js =====//
 const mongoose = require('mongoose');
 
 const cartSchema = new mongoose.Schema(
@@ -23,6 +22,14 @@ const cartSchema = new mongoose.Schema(
           default: 1,
         },
         price: Number,
+        size: {
+          type: String,
+          default: '',
+        },
+        color: {
+          type: String,
+          default: '',
+        },
       },
     ],
   },
@@ -30,4 +37,3 @@ const cartSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('Cart', cartSchema);
-
